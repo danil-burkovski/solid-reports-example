@@ -15,12 +15,7 @@ class Client:
 
     __DATETIME_FORMAT = '%Y-%m-%d %H:%M:%S'
 
-    def __init__(
-            self,
-            public_key: str,
-            private_key: str,
-            base_api_url: str = DEFAULT_BASE_API_URL
-    ):
+    def __init__(self, public_key: str, private_key: str, base_api_url: str = DEFAULT_BASE_API_URL):
         self.__public_key = public_key
         self.__private_key = private_key
         self.__base_api_url = base_api_url
