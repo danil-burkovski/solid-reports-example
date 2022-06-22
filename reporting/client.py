@@ -30,6 +30,11 @@ class Client:
         key = "orders"
         return self.__get_report(path, date_from, date_to, key)
 
+    def apm_orders(self, date_from: datetime, date_to: datetime) -> Iterable[Dict]:
+        path = "apm-orders"
+        key = "orders"
+        return self.__get_report(path, date_from, date_to, key)
+
     def fraud_alerts(self, date_from: datetime, date_to: datetime) -> Iterable[Dict]:
         path = "card-orders/fraud-alerts"
         key = "alerts"
@@ -40,6 +45,11 @@ class Client:
         key = "subscriptions"
         extractor = operator.methodcaller("values")
         return self.__get_report(path, date_from, date_to, key, extractor)
+
+    def paypal_disputes(self, date_from: datetime, date_to: datetime) -> Iterable[Dict]:
+        path = "apm-orders/paypal-disputes"
+        key = "disputes"
+        return self.__get_report(path, date_from, date_to, key)
 
     def __get_report(self, path: str,
                      date_from: datetime, date_to: datetime,
