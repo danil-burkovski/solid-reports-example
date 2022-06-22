@@ -74,3 +74,7 @@ class Subscription(pydantic.BaseModel):
         raw_invoices = raw_subscription.pop("invoices").values()
         invoices = [Invoice.from_dict(raw_invoice) for raw_invoice in raw_invoices]
         return cls(**raw_subscription, invoices=invoices)
+
+    @classmethod
+    def from_kwargs(cls, **kwargs: dict[str, Any]):
+        return cls.from_dict(kwargs)
