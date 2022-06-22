@@ -2,24 +2,33 @@ import base64
 import hashlib
 import hmac
 import json
-import operator
 from datetime import datetime
-from typing import Callable, Dict, Iterable, Optional
+from typing import Any, Dict, Iterable
 
 import pydantic
 import requests
+
+from reporting import schema
 
 
 class Channel(pydantic.BaseModel):
     name: str
     public_key: str
     private_key: str
-    is_apm: Optional[bool]
+    is_apm: bool = False
+
+    class Config:
+        fields = {"public_key": {"exclude": True},
+                  "private_key": {"exclude": True}}
 
 
 class DateRange(pydantic.BaseModel):
     date_from: datetime
     date_to: datetime
+
+
+ReportPage = Dict[str, Any]
+ReportPages = Iterable[ReportPage]
 
 
 class Client:
@@ -32,61 +41,74 @@ class Client:
         self.channel = channel
         self.base_api_url = base_api_url
 
-    def card_orders(self, date_range: DateRange) -> Iterable[Dict]:
+    def card_orders(self, date_range: DateRange) -> Iterable[schema.CardOrder]:
         path = "card-orders"
         key = "orders"
-        return self.__get_report(path, date_range, key)
+        report_items = self.__get_report_items(path, date_range, key)
+        for report_item in report_items:
+            yield schema.CardOrder(**report_item)
 
-    def chargebacks(self, date_range: DateRange) -> Iterable[Dict]:
+    def chargebacks(self, date_range: DateRange) -> Iterable[schema.ChargebackOrder]:
         path = "card-orders/chargebacks"
         key = "orders"
-        return self.__get_report(path, date_range, key)
+        report_items = self.__get_report_items(path, date_range, key)
+        for report_item in report_items:
+            yield schema.ChargebackOrder(**report_item)
 
-    def apm_orders(self, date_range: DateRange) -> Iterable[Dict]:
+    def apm_orders(self, date_range: DateRange) -> Iterable[schema.APMOrder]:
         path = "apm-orders"
         key = "orders"
-        return self.__get_report(path, date_range, key)
+        report_items = self.__get_report_items(path, date_range, key)
+        for report_item in report_items:
+            yield schema.APMOrder(**report_item)
 
-    def fraud_alerts(self, date_range: DateRange) -> Iterable[Dict]:
+    def fraud_alerts(self, date_range: DateRange) -> Iterable[schema.FraudAlert]:
         path = "card-orders/fraud-alerts"
         key = "alerts"
-        return self.__get_report(path, date_range, key)
+        report_items = self.__get_report_items(path, date_range, key)
+        for report_item in report_items:
+            yield schema.FraudAlert(**report_item)
 
-    def subscriptions(self, date_range: DateRange) -> Iterable[Dict]:
+    def subscriptions(self, date_range: DateRange) -> Iterable[schema.Subscription]:
         path = "subscriptions"
         key = "subscriptions"
-        extractor = operator.methodcaller("values")
-        return self.__get_report(path, date_range, key, extractor)
+        report_items = self.__get_report_items(path, date_range, key)
+        for report_item in report_items:
+            yield schema.Subscription.from_dict(report_item)
 
-    def paypal_disputes(self, date_range: DateRange) -> Iterable[Dict]:
+    def paypal_disputes(self, date_range: DateRange) -> Iterable[schema.PayPalDispute]:
         path = "apm-orders/paypal-disputes"
         key = "disputes"
-        return self.__get_report(path, date_range, key)
+        report_items = self.__get_report_items(path, date_range, key)
+        for report_item in report_items:
+            yield schema.PayPalDispute(**report_item)
 
-    def __get_report(self, path: str,
-                     date_range: DateRange,
-                     key: str,
-                     items_extractor: Callable = lambda items: items) -> Iterable[Dict]:
-        report_pages = self.__get_report_pages_iterator(path, date_range)
-        for items in map(operator.itemgetter(key), report_pages):
-            yield from items_extractor(items)
+    def __get_report_items(self, path: str, date_range: DateRange, key: str) -> ReportPages:
+        for report_page in self.__get_report_pages(path, date_range):
+            if key not in report_page:
+                raise ValueError(report_page)
+            items = report_page[key]
+            if isinstance(items, dict):
+                yield from items.values()
+            else:
+                yield from items
 
-    def __get_report_pages_iterator(self, path: str, date_range: DateRange) -> Iterable[Dict]:
+    def __get_report_pages(self, path: str, date_range: DateRange) -> ReportPages:
         request_body = self.__request_body_from_date_range(date_range)
         while True:
             response = self.__send_request(path, request_body)
             if not response.ok:
                 raise response.raise_for_status()
-            response_body = response.json()
+            report_page = response.json()
 
-            yield response_body
+            yield report_page
 
-            next_page_iterator = response_body["metadata"]["next_page_iterator"]
+            next_page_iterator = report_page["metadata"]["next_page_iterator"]
             if next_page_iterator is None:
                 break
             request_body["next_page_iterator"] = next_page_iterator
 
-    def __request_body_from_date_range(self, date_range: DateRange):
+    def __request_body_from_date_range(self, date_range: DateRange) -> Dict[str, str]:
         return {"date_from": date_range.date_from.strftime(self.__DATETIME_FORMAT),
                 "date_to": date_range.date_to.strftime(self.__DATETIME_FORMAT)}
 
