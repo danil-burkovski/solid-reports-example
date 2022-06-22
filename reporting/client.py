@@ -3,7 +3,7 @@ import hashlib
 import hmac
 import json
 from datetime import datetime
-from typing import Any, Dict, Iterable
+from typing import Any, Callable, Dict, Iterable, TypeVar
 
 import pydantic
 import requests
@@ -29,6 +29,7 @@ class DateRange(pydantic.BaseModel):
 
 ReportPage = Dict[str, Any]
 ReportPages = Iterable[ReportPage]
+T = TypeVar("T")
 
 
 class Client:
@@ -42,46 +43,32 @@ class Client:
         self.base_api_url = base_api_url
 
     def card_orders(self, date_range: DateRange) -> Iterable[schema.CardOrder]:
-        path = "card-orders"
-        key = "orders"
-        report_items = self.__get_report_items(path, date_range, key)
-        for report_item in report_items:
-            yield schema.CardOrder(**report_item)
+        return self.__process_report("card-orders", date_range, "orders", schema.CardOrder)
 
     def chargebacks(self, date_range: DateRange) -> Iterable[schema.ChargebackOrder]:
-        path = "card-orders/chargebacks"
-        key = "orders"
-        report_items = self.__get_report_items(path, date_range, key)
-        for report_item in report_items:
-            yield schema.ChargebackOrder(**report_item)
+        return self.__process_report("card-orders/chargebacks", date_range, "orders",
+                                     schema.ChargebackOrder)
 
     def apm_orders(self, date_range: DateRange) -> Iterable[schema.APMOrder]:
-        path = "apm-orders"
-        key = "orders"
-        report_items = self.__get_report_items(path, date_range, key)
-        for report_item in report_items:
-            yield schema.APMOrder(**report_item)
+        return self.__process_report("apm-orders", date_range, "orders", schema.APMOrder)
 
     def fraud_alerts(self, date_range: DateRange) -> Iterable[schema.FraudAlert]:
-        path = "card-orders/fraud-alerts"
-        key = "alerts"
-        report_items = self.__get_report_items(path, date_range, key)
-        for report_item in report_items:
-            yield schema.FraudAlert(**report_item)
+        return self.__process_report("card-orders/fraud-alerts", date_range, "alerts",
+                                     schema.FraudAlert)
 
     def subscriptions(self, date_range: DateRange) -> Iterable[schema.Subscription]:
-        path = "subscriptions"
-        key = "subscriptions"
-        report_items = self.__get_report_items(path, date_range, key)
-        for report_item in report_items:
-            yield schema.Subscription.from_dict(report_item)
+        return self.__process_report("subscriptions", date_range, "subscriptions",
+                                     schema.Subscription.from_kwargs)
 
     def paypal_disputes(self, date_range: DateRange) -> Iterable[schema.PayPalDispute]:
-        path = "apm-orders/paypal-disputes"
-        key = "disputes"
+        return self.__process_report("apm-orders/paypal-disputes", date_range, "disputes",
+                                     schema.PayPalDispute)
+
+    def __process_report(self, path: str, date_range: DateRange, key: str,
+                         record_factory: Callable[..., T]) -> Iterable[T]:
         report_items = self.__get_report_items(path, date_range, key)
         for report_item in report_items:
-            yield schema.PayPalDispute(**report_item)
+            yield record_factory(**report_item)
 
     def __get_report_items(self, path: str, date_range: DateRange, key: str) -> ReportPages:
         for report_page in self.__get_report_pages(path, date_range):
